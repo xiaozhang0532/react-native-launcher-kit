@@ -63,6 +63,8 @@ public class LauncherKitModule extends ReactContextBaseJavaModule {
   private class AppDetail {
     CharSequence label;
     CharSequence packageName;
+    long firstInstallTime;
+    long lastUpdateTime;
     Drawable icon;
     public String toString() {
       Bitmap icon;
@@ -80,28 +82,56 @@ public class LauncherKitModule extends ReactContextBaseJavaModule {
       byte[] byteArray = byteArrayOutputStream.toByteArray();
       String encoded = Base64.encodeToString(byteArray, Base64.NO_WRAP);
 
-      return "{\"label\":\"" + this.label + "\",\"packageName\":\"" + this.packageName + "\",\"icon\":\"" + encoded + "\"}";
+      // return "{\"label\":\"" + this.label + "\",\"packageName\":\"" + this.packageName + "\",\"icon\":\"" + encoded + "\"}";
+      return "{\"label\":\"" + this.label + "\",\"packageName\":\"" + this.packageName + "\",\"firstInstallTime\":\"" + this.firstInstallTime + "\",\"lastUpdateTime\":\"" + this.lastUpdateTime + "\"}";
     }
   }
 
   @ReactMethod
-  private String getApps(){
-    List<AppDetail> apps = new ArrayList<>();
-    PackageManager pManager = this.reactContext.getPackageManager();
+  private void getApps(final Callback callback) {
+    class OneShotTask implements Runnable {
+      private final ReactApplicationContext reactContext;
 
-    Intent i = new Intent(Intent.ACTION_MAIN, null);
-    i.addCategory(Intent.CATEGORY_LAUNCHER);
-    List<ResolveInfo> allApps = pManager.queryIntentActivities(i, 0);
-    for (ResolveInfo ri : allApps) {
-      AppDetail app = new AppDetail();
-      app.label = ri.loadLabel(pManager);
-      app.packageName = ri.activityInfo.packageName;
-      app.icon = ri.activityInfo.loadIcon(this.reactContext.getPackageManager());
-      apps.add(app);
+      OneShotTask(final ReactApplicationContext reactContext) {
+        this.reactContext = reactContext;
+      }
 
+      @Override
+      public void run() {
+        List<AppDetail> apps = new ArrayList<>();
+        PackageManager pManager = this.reactContext.getPackageManager();
+
+        Intent i = new Intent(Intent.ACTION_MAIN, null);
+        i.addCategory(Intent.CATEGORY_LAUNCHER);
+        List<ResolveInfo> allApps = pManager.queryIntentActivities(i, 0);
+        for (ResolveInfo ri : allApps) {
+          AppDetail app = new AppDetail();
+          app.label = ri.loadLabel(pManager);
+          app.packageName = ri.activityInfo.packageName;
+
+          app.icon = ri.activityInfo.loadIcon(this.reactContext.getPackageManager());
+          try {
+            PackageInfo packageInfo = pManager.getPackageInfo(app.packageName.toString(), 0);
+            app.firstInstallTime = packageInfo.firstInstallTime;
+            app.lastUpdateTime = packageInfo.lastUpdateTime;
+          } catch (PackageManager.NameNotFoundException e) {
+            e.printStackTrace();
+          }
+          apps.add(app);
+        }
+
+        // Convert the list to a String and pass it back through the callback
+        String result = apps.toString();
+        callback.invoke(result);
+      }
     }
-    return apps.toString();
 
+    // Create an instance of OneShotTask
+    OneShotTask oneShotTask = new OneShotTask(reactContext);
+
+    // Create a new thread and execute the one-time task
+    Thread thread = new Thread(oneShotTask);
+    thread.start();
   }
 
   private List<String> getAllApps() {
@@ -196,7 +226,14 @@ public class LauncherKitModule extends ReactContextBaseJavaModule {
       buildNumber = "unknown";
       appName = "unknown";
     }
-    constants.put("getApps", getApps());
+    // constants.put("getApps", getApps());
+    getApps(new Callback() {
+        @Override
+        public void invoke(Object... args) {
+            String appsResult = (String) args[0];
+            constants.put("getApps", appsResult);
+        }
+    });
     constants.put("getNonSystemApps", getNonSystemApps());
     DeviceDetails device = new DeviceDetails();
     device.appName = appName;
