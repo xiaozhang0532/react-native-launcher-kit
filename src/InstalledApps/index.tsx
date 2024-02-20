@@ -33,16 +33,21 @@ const installedApps: InstalledApps = {
    * Returns an array of all installed apps on the device, sorted alphabetically by app label.
    * @returns An array of `AppDetail` objects representing the installed apps.
    */
-  getSortedApps(): AppDetail[] {
-    try {
-      const tempApps = JSON.parse(LauncherKit?.getApps); // Attempt to parse the JSON data returned by `LauncherKit.getApps()`.
-      return tempApps.sort((a: AppDetail, b: AppDetail) =>
-        a.label?.toLowerCase().localeCompare(b.label?.toLowerCase())
-      ); // Sort the array of apps by app label in alphabetical order, ignoring case.
-    } catch (error) {
-      if (__DEV__) console.error(error); // Log the error to the console if the app is in development mode.
-      return []; // Return an empty array if an error occurs
-    }
+  getSortedApps(): Promise<AppDetail[]> {
+    return new Promise((resolve, reject) => {
+      try {
+        LauncherKit.getApps((e) => {
+          const tempApps = JSON.parse(e); // Attempt to parse the JSON data returned by `LauncherKit.getApps()`.
+          const sortedApps = tempApps.sort((a: AppDetail, b: AppDetail) =>
+            a.label?.toLowerCase().localeCompare(b.label?.toLowerCase())
+          ); // Sort the array of apps by app label in alphabetical order, ignoring case.
+          resolve(sortedApps);
+        });
+      } catch (error) {
+        if (__DEV__) console.error(error); // Log the error to the console if the app is in development mode.
+        reject([]);
+      }
+    });
   },
 };
 
